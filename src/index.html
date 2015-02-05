@@ -1,0 +1,50 @@
+<script src="./js/words.js"></script>
+<script>
+
+
+
+
+    var bullshit = function(){
+        var players = [];
+        var matrix = [];
+        var upstream = null;
+        var connected = false;
+
+        this.init = function(){
+          this.connect();
+        }.bind(this);
+
+        this.connect = function(){
+            var upstream = new WebSocket('ws://sockets.mbed.org/ws/itfa15/rw');
+            upstream.onopen = function () {
+                this.connected = true;
+                console.log("Upstream ready!");
+            }.bind(this);
+            upstream.onerror = function (error) {
+                this.connected = false;
+                console.log('WebSocket Error ' + error);
+            }.bind(this);
+            upstream.onmessage = this.receiveMessage;
+        }.bind(this);
+
+        this.receiveMessage = function(e) {
+            console.log(e.data);
+        }.bind(this);
+
+        this.sendMessage = function(e) {
+            if(this.connected) {
+
+            }
+        }.bind(this);
+
+        this.init();
+    };
+
+
+    new bullshit();
+
+
+</script>
+<table>
+
+</table>
