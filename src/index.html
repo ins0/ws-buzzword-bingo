@@ -25,6 +25,7 @@
                 console.log('WebSocket Error ' + error);
             }.bind(this);
             upstream.onmessage = this.receiveMessage;
+            this.upstream = upstream;
         }.bind(this);
 
         this.receiveMessage = function(e) {
@@ -33,15 +34,18 @@
 
         this.sendMessage = function(e) {
             if(this.connected) {
-
+                this.upstream.send("wow");
             }
         }.bind(this);
 
         this.init();
     };
 
+    bullshit.prototype.test = function(){
+        this.sendMessage();
+    }
 
-    new bullshit();
+    var bullshitObject = new bullshit();
 
 
 </script>
