@@ -1,54 +1,187 @@
-<script src="./js/words.js"></script>
-<script>
-
-
-
-
-    var bullshit = function(){
-        var players = [];
-        var matrix = [];
-        var upstream = null;
-        var connected = false;
-
-        this.init = function(){
-          this.connect();
-        }.bind(this);
-
-        this.connect = function(){
-            var upstream = new WebSocket('ws://sockets.mbed.org/ws/itfa15/rw');
-            upstream.onopen = function () {
-                this.connected = true;
-                console.log("Upstream ready!");
-            }.bind(this);
-            upstream.onerror = function (error) {
+<html>
+    <head>
+        <script src="./js/command.js"></script>
+        <script src="./js/player.js"></script>
+        <script src="./js/words.js"></script>
+        <script>
+            var buzzword = function(){
+                this.players = [];
+                this.upstream = null;
                 this.connected = false;
-                console.log('WebSocket Error ' + error);
-            }.bind(this);
-            upstream.onmessage = this.receiveMessage;
-            this.upstream = upstream;
-        }.bind(this);
+                this.me = null;
 
-        this.receiveMessage = function(e) {
-            console.log(e.data);
-        }.bind(this);
+                this.init = function(){
+                    window.addEventListener('beforeunload', this.onDisconnect);
 
-        this.sendMessage = function(e) {
-            if(this.connected) {
-                this.upstream.send("wow");
+                    setInterval(function(){
+                        // send heartbeat when player is registered
+                        if(this.me) {
+                            this.sendMessage('heartBeat', null, true);
+                        }
+                    }.bind(this), 5000);
+                }.bind(this);
+
+                this.connect = function(){
+                    console.log('connection::init');
+                    var upstream = new WebSocket('ws://sockets.mbed.org/ws/itfa15/rw');
+                    upstream.onopen = function () {
+                        console.log('connection::ready');
+                        this.connected = true;
+                        this.init();
+                    }.bind(this);
+                    upstream.onerror = function (error) {
+                        console.log('connection::error', error);
+                        this.connected = false;
+                    }.bind(this);
+                    upstream.onmessage = this.receiveMessage;
+                    upstream.onclose = this.onDisconnect;
+                    this.upstream = upstream;
+                }.bind(this);
+
+                this.receiveMessage = function(e) {
+                    var receivedCommand = new command();
+                    receivedCommand.fromJSON(e.data);
+
+                    if(!this.me || !receivedCommand.sender || (receivedCommand.isBroadcast && receivedCommand.sender.id == this.me.id)) {
+                        // ignore incoming data when
+                        // not registered
+                        // no sender
+                        // broadcast message
+                        return false;
+                    }
+
+                    console.log('data::receive', receivedCommand);
+                    switch(receivedCommand.type) {
+                        case 'registerPlayer': this.onRegisterPlayer(receivedCommand); break;
+                        case 'removePlayer': this.onRemovePlayer(receivedCommand); break;
+                        case 'chatMessage': this.onChatMessage(receivedCommand); break;
+                        case 'heartBeat': this.onHeartBeat(receivedCommand); break;
+                        default: console.log('data::unknownReceivedCommand', receivedCommand.type);
+                    }
+
+                }.bind(this);
+
+                this.sendMessage = function(type, data, broadcast) {
+                    if(this.connected && this.me) {
+                        var sendCommand = new command(type, data, broadcast);
+                        console.log('data::send', sendCommand);
+                        this.upstream.send(sendCommand.toJSON());
+                    }
+                }.bind(this);
+
+                this.onDisconnect = function(e) {
+                    this.sendMessage('removePlayer');
+                }.bind(this);
+
+                this.onHeartBeat = function(command) {
+                    // register player if not registered
+                    this.onRegisterPlayer(command);
+                };
+
+                this.onRemovePlayer = function(command){
+                    if(this.players.containsPlayer(command.sender)) {
+                        this.players = this.players.removeObject(command.sender);
+                        this.sendChatMessage(command.sender.username + ' hat das Spiel verlassen', true);
+                    }
+
+                    document.getElementById('players').innerHTML = this.players.map(function(obj){
+                        return escapeHTML(obj.username);
+                    }).join('<br />');
+                };
+
+                this.onRegisterPlayer = function(command){
+                    if(!this.players.containsPlayer(command.sender)) {
+                        this.players.push(command.sender);
+                        this.sendChatMessage(command.sender.username + ' hat das Spiel betreten', true);
+                        document.getElementById('players').innerHTML = this.players.map(function(obj){
+                            return escapeHTML(obj.username);
+                        }).join('<br />');
+                    }
+                };
+
+                this.onChatMessage = function(command){
+                    var time = new Date();
+                    var chatElement = document.getElementById('chat');
+
+                    if(command.data.info) {
+                        chatElement.innerHTML += time.getHours() + ':' + time.getMinutes() + ':' + time.getUTCSeconds() + ' <small>' + escapeHTML(command.data.message) + '</small><br />';
+                    } else {
+                        chatElement.innerHTML += time.getHours() + ':' + time.getMinutes() + ':' + time.getUTCSeconds() + ' <b style="color:' + command.sender.color + '">' + escapeHTML(command.sender.username) + '</b>: ' + escapeHTML(command.data.message) + '<br />';
+                    }
+
+                    chatElement.scrollTop = chatElement.scrollHeight;
+                };
+
+                this.connect();
+            };
+
+            buzzword.prototype.registerPlayer = function(username){
+                // if allready registered do nothing
+                if(this.me || username.replace(/\s+/, '').length <= 0){
+                    return false;
+                }
+
+                username = username.replace(/\s\s+/, ' ').trim();
+                this.me = new player(username);
+
+                // send first heartBeat
+                this.sendMessage('registerPlayer', null, true);
+                this.onRegisterPlayer({sender: this.me});
+            };
+
+            buzzword.prototype.sendChatMessage = function(text, info) {
+                if(text.replace(/\s+/, '').length <= 0 || !this.me){
+                    return false;
+                }
+                this.sendMessage('chatMessage', {
+                    message: text,
+                    info: info
+                });
             }
-        }.bind(this);
 
-        this.init();
-    };
+            Array.prototype.containsPlayer = function (object) {
+                var isIn = false;
+                this.forEach(function(obj){
+                    if(JSON.stringify(obj) == JSON.stringify(object)) {
+                        isIn = true;
+                    }
+                });
+                return isIn;
+            };
 
-    bullshit.prototype.test = function(){
-        this.sendMessage();
-    }
+            Array.prototype.removeObject = function (object) {
+                var newObject = [];
+                this.forEach(function(obj){
+                    if(JSON.stringify(obj) !== JSON.stringify(object)) {
+                        newObject.push(obj);
+                    }
+                });
+                return newObject;
+            };
 
-    var bullshitObject = new bullshit();
+            var escapeHTML = function(html){
+                var div = document.createElement('div');
+                var text = document.createTextNode(html);
+                div.appendChild(text);
+                return div.innerHTML;
+            };
 
-
-</script>
-<table>
-
-</table>
+            var buzzwordObject = new buzzword();
+        </script>
+    </head>
+    <body>
+        <b>Username:</b> <input id="username" type="text" value="" /><input type="submit" onclick="javascript:buzzwordObject.registerPlayer(document.getElementById('username').value);" value="Ok" />
+        <hr>
+        <table id="table"></table>
+        <hr>
+        <div>
+            <b>Current Players:</b><br />
+            <div id="players"></div>
+        </div>
+        <hr>
+        <div style="overflow: hidden; overflow-y: scroll; height:150px;" id="chat"></div>
+        <b>Message:</b> <input id="message" type="text" value="" /><input type="submit" onclick="javascript:buzzwordObject.sendChatMessage(document.getElementById('message').value);" value="Senden" />
+        <hr>
+        <img src="https://www.google.de/images/srpr/logo11w.png" width="50" />
+    </body>
+</html>
