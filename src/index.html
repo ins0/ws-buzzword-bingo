@@ -133,8 +133,7 @@
                 this.me = new player(username);
 
                 // send first heartBeat
-                this.sendMessage('registerPlayer', null, true);
-                this.onRegisterPlayer({sender: this.me});
+                this.sendMessage('heartBeat');
             };
 
             buzzword.prototype.sendChatMessage = function(text, info) {
