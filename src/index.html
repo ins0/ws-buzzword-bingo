@@ -71,6 +71,9 @@
 
                 this.onDisconnect = function(e) {
                     this.sendMessage('removePlayer');
+                    this.upstream.onclose = function () {};
+                    this.connect = false;
+                    this.upstream.close();
                 }.bind(this);
 
                 this.onHeartBeat = function(command) {
@@ -82,34 +85,39 @@
                     if(this.players.containsPlayer(command.sender)) {
                         this.players = this.players.removeObject(command.sender);
                         this.sendChatMessage(command.sender.username + ' hat das Spiel verlassen', true);
+                        this.updateCurrentPlayers();
                     }
+                };
 
+                this.updateCurrentPlayers = function(){
                     document.getElementById('players').innerHTML = this.players.map(function(obj){
                         return escapeHTML(obj.username);
-                    }).join('<br />');
+                    }).join(',');
+                }
+
+                this.addChatLine = function(text, sender, info){
+                    var time = new Date();
+                    var chatElement = document.getElementById('chat');
+
+                    if(info) {
+                        chatElement.innerHTML += '<small>' + escapeHTML(text) + '</small><br />';
+                    } else {
+                        chatElement.innerHTML += time.getHours() + ':' + time.getMinutes() + ':' + time.getUTCSeconds() + ' <b style="color:' + sender.color + '">' + escapeHTML(sender.username) + '</b>: ' + escapeHTML(text) + '<br />';
+                    }
+
+                    chatElement.scrollTop = chatElement.scrollHeight;
                 };
 
                 this.onRegisterPlayer = function(command){
                     if(!this.players.containsPlayer(command.sender)) {
                         this.players.push(command.sender);
-                        this.sendChatMessage(command.sender.username + ' hat das Spiel betreten', true);
-                        document.getElementById('players').innerHTML = this.players.map(function(obj){
-                            return escapeHTML(obj.username);
-                        }).join('<br />');
+                        this.addChatLine(command.sender.username + ' hat das Spiel betreten', null, true);
+                        this.updateCurrentPlayers();
                     }
                 };
 
                 this.onChatMessage = function(command){
-                    var time = new Date();
-                    var chatElement = document.getElementById('chat');
-
-                    if(command.data.info) {
-                        chatElement.innerHTML += time.getHours() + ':' + time.getMinutes() + ':' + time.getUTCSeconds() + ' <small>' + escapeHTML(command.data.message) + '</small><br />';
-                    } else {
-                        chatElement.innerHTML += time.getHours() + ':' + time.getMinutes() + ':' + time.getUTCSeconds() + ' <b style="color:' + command.sender.color + '">' + escapeHTML(command.sender.username) + '</b>: ' + escapeHTML(command.data.message) + '<br />';
-                    }
-
-                    chatElement.scrollTop = chatElement.scrollHeight;
+                    this.addChatLine(command.data.message, command.sender, command.data.info);
                 };
 
                 this.connect();
