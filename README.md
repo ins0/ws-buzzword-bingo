@@ -1,1 +1,1 @@
-# bullshit-bingo-ws
+# ws-buzzword-bingo
